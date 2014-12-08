@@ -4,7 +4,7 @@ from .finders import Location
 from .vision import best_convolution, grey_scale, find_edges
 from .colour import rgb_to_hsv
 from .ocr import Classifier
-from .matchers import fuzzy_match
+from .matchers import fuzzy_match, find_tolerance_values
 import numpy
 from scipy.ndimage.measurements import (
     label,
@@ -89,12 +89,12 @@ class FuzzyTemplateFinder(BaseFinder):
         They are thus more robust to slight variations in rendering,
 
     """
-    def __init__(self, template, normed_tolerance=None, raw_tolerance=None):
+    def __init__(self, template, normed_tolerance=None, raw_tolerance=None, method=None):
         self.template = template
-        self.normed_tolerance = normed_tolerance
-        self.raw_tolerance = raw_tolerance
+        self.method = method
+        self.normed_tolerance, self.raw_tolerance = self.set_tolerance_values_if_not_set_already(normed_tolerance, raw_tolerance)
 
-    def find(self, in_location, normed_tolerance=None, raw_tolerance=None, method='correlation'):
+    def find(self, in_location, normed_tolerance=None, raw_tolerance=None):
         h, w = self.template.image.shape[:2]
         image = in_location.image
         gimage = grey_scale(image)
@@ -105,9 +105,41 @@ class FuzzyTemplateFinder(BaseFinder):
         if raw_tolerance is None:
             raw_tolerance = self.raw_tolerance
 
-        for x, y in fuzzy_match(gimage, gtemplate, normed_tolerance=normed_tolerance, raw_tolerance=raw_tolerance, method=method):
+        for x, y in fuzzy_match(gimage, gtemplate, normed_tolerance=normed_tolerance, raw_tolerance=raw_tolerance, method=self.method):
             #print("x=%d, y=%d, in_location=%r" % (x,y,in_location))
             yield Location(x, y, w, h, parent=in_location)
+
+    def find_tolerance_values(self, shrink=None):
+        """finds sensible values for normed_tolerance and raw_tolerance for this image."""
+        return find_tolerance_values(self.template, shrink=shrink, method=self.method)  
+
+    def set_tolerance_values(self, shrink=None):
+        """finds sensible values for normed_tolerance and raw_tolerance for this image, then sets them on the finder object"""
+        (self.normed_tolerance, self.raw_tolerance) = self.find_tolerance_values(shrink=shrink)  
+        
+    def set_tolerance_values_if_not_set_already(self, normed_tolerance, raw_tolerance):
+        """ this will work out sensible values for the tolerances by shrinking the images then re-enlarging them using different types of anti-aliasing
+        """
+        if normed_tolerance is None or raw_tolerance is None:
+            normed, raw = self.find_tolerance_values()
+            if normed_tolerance is None:
+                normed_tolerance = normed
+            if raw_tolerance is None:
+                raw_tolerance = raw
+
+        # some sense checking:
+        if raw_tolerance > 1:
+            raise ValueError("raw_tolerance = %.2f > 1, this should not happen. Tolerance should be a proportion match between 0.5 and 1" % raw_tolerance)
+        elif raw_tolerance < 0.5:
+            raise ValueError("raw_tolerance = %.2f < 0.5, this should not happen. This will get too many false positives and be slow." % raw_tolerance)
+            
+        if normed_tolerance > 1:
+            raise ValueError("normed_tolerance = %.2f > 1, this should not happen. Tolerance should be a proportion match between 0.5 and 1" % normed_tolerance)
+        elif normed_tolerance < 0.5:
+            raise ValueError("normed_tolerance = %.2f < 0.5, this should not happen. This will get too many false positives." % normed_tolerance)
+        
+        return normed_tolerance, raw_tolerance
+                
 
     def __repr__(self):
         return "match %r fuzzily" % (self.template, )

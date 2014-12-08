@@ -2,6 +2,8 @@ from .match_position_finder_helpers import get_tiles_at_potential_match_regions,
 from scipy.signal import fftconvolve
 from scipy.ndimage.measurements import label, find_objects
 import numpy as np
+from .vision import grey_scale
+from PIL import Image
 
 # both these methods return array of points giving bottom right coordinate of match
 
@@ -84,7 +86,7 @@ def fuzzy_match(image, template, normed_tolerance=None, raw_tolerance=None, meth
        as all as false positives which inevitably occur when performing fuzzy matching. To generate these values, we
        tested maching letters with different type of antialiasing on a number of backgrounds.
     """
-    if method == 'correlation':
+    if method == 'correlation' or method is None:
         if not raw_tolerance:
             raw_tolerance = 0.95
         if not normed_tolerance:
@@ -102,6 +104,8 @@ def fuzzy_match(image, template, normed_tolerance=None, raw_tolerance=None, meth
         if not normed_tolerance:
             normed_tolerance = 0.05
         results = np.array(match_via_squared_difference(image, template, raw_tolerance=raw_tolerance, sq_diff_tolerance=normed_tolerance))
+    else:
+        raise ValueError("method = %s not found." % method)
     h, w = image.shape
     th, tw = template.shape
     results = np.array([(result[0], result[1]) for result in results])
@@ -170,3 +174,94 @@ def highlight_matched_region_normalised(image, shape, list_of_coords):
         except IndexError:
             im_rgb[x,y] = 0, 100, 100
     return im_rgb
+    
+    
+def find_tolerance_values(template, shrink=None, method=None):
+    """
+    This function returns values for the normed and raw tolerance that will allow Geist to find the anti aliased images.
+    It takes a template image, scales it down by the shrink_factor (default is half) then brings it back up using 4 different anti aliasing techniques
+    and compares them using the fft techniques to find the largest tolerence values that will find all of the images.
+    """
+    if shrink is None:
+        shrink=0.9999999
+    if method is None:
+        method="correlation"    
+    
+    template_list = _make_template_list(template, shrink)
+    normed = None
+    raw = None
+    match_position = (template.image.shape[0]-1, template.image.shape[1]-1)
+    if method=="correlation":
+        normed = _find_suitable_normed_tolerances_correlation(template_list, match_position)
+        raw = _find_suitable_raw_tolerances_correlation(template_list, match_position)
+    elif method=="correlation_coefficient":
+        normed = _find_suitable_normed_tolerances_correlation(template_list, match_position)
+        raw = _find_suitable_raw_tolerances_correlation(template_list, match_position)
+    else:
+        raise ValueError('method must be either "correlation_coefficient" or "correlation" (default)')
+    print normed, raw
+    return normed, raw
+    
+    
+def _make_template_list(template, shrink_factor):
+    aa = 0
+    template_array = template.image
+    template_grey_array = grey_scale(template_array)
+    template_list = [template_grey_array]
+    
+    template_image = Image.fromarray(template_array)
+    template_image_shape = template_image.size
+    
+    shrunk_image_shape = (int(dimension*shrink_factor) for dimension in template_image_shape)
+    shrunk_image = template_image.resize(shrunk_image_shape)
+    for aa in range(4):
+        aliased_image = shrunk_image.resize(template_image_shape,aa)
+        #name = 'b' + str(aa) + '.png'
+        #aliased_image.save(name)
+        aliased_image = np.array(aliased_image)
+        aliased_image = grey_scale(aliased_image)
+        template_list.append(aliased_image)
+    
+    #template_copy = np.copy(template_grey_array)
+    #template_max = np.max(template_copy)    
+    #template_split_point = template_max // 2
+    #mask  = template_copy > template_split_point
+    #template_copy[mask]=template_max
+    #template_copy[~mask]=0
+    #template_list.append(template_copy)
+    return template_list
+    
+    
+"""
+below are the functions used of find sensible tolerance values for a given image
+"""
+def _find_suitable_raw_tolerances_correlation(list_of_templates, match_position):
+    match_values = [fftconvolve(template1, list_of_templates[0][::-1,::-1])[match_position] for template1 in list_of_templates]
+    props = np.array([[val1/val2 for val1 in match_values] for val2 in match_values])
+    below_one = [prop for prop in props.flatten() if prop < 1.0]
+    #print np.array_equal(list_of_templates[0], list_of_templates[-1])
+    return np.min(below_one)
+
+def _find_suitable_raw_tolerances_correlation_coefficient(list_of_templates, match_position):
+    temp_means = [np.mean(template) for template in list_of_templates]
+    temp_minus_means = [template - temp_mean for template, temp_mean in zip(list_of_templates, temp_means)]
+    match_values = [fftconvolve(list_of_templates[0], temp_minus_mean[::-1,::-1])[match_position] for temp_minus_mean in temp_minus_means]
+    props = np.array([[val1/val2 for val1 in match_values] for val2 in match_values])
+    below_one = [prop for prop in props.flatten() if prop < 1.0]
+    return np.min(below_one)
+
+def _find_suitable_normed_tolerances_correlation(list_of_templates, match_position):
+    match_values = np.array([[fftconvolve(template1, template2[::-1,::-1])[match_position] for template1 in list_of_templates] for template2 in list_of_templates])
+    norms = np.array([[np.linalg.norm(template2)*np.linalg.norm(template1) for template1 in list_of_templates] for template2 in list_of_templates])
+    match_vals_normed = match_values / norms
+    #print np.array(match_vals_normed)
+    return np.min(match_vals_normed)
+
+def _find_suitable_normed_tolerances_correlation_coefficient(list_of_templates, match_position):
+    temp_means = [np.mean(template) for template in list_of_templates]
+    temp_minus_means = [template - temp_mean for template, temp_mean in zip(list_of_templates, temp_means)]
+    temp_norms = [np.linalg.norm(temp_minus_mean) for temp_minus_mean in temp_minus_means]
+    match_values = np.array([[fftconvolve(template, temp_minus_mean[::-1,::-1])[match_position] for temp_minus_mean in temp_minus_means] for template in list_of_templates])
+    norms = np.array([[temp_norm1*temp_norm2 for temp_norm1 in temp_norms] for temp_norm2 in temp_norms])
+    match_vals_normed = [match_value/norm for match_value, norm in zip(match_values.flatten(), norms.flatten())]
+    return np.min(match_vals_normed)
