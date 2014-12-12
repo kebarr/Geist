@@ -1,36 +1,77 @@
 import numpy as np
+from scipy.ndimage.measurements import label, find_objects
+
+def match_positions(shape, list_of_coords):
+    """ In cases where we have multiple matches, each highlighted by a region of coordinates,
+        we need to separate matches, and find mean of each to return as match position
+    """
+    match_array = np.zeros(shape)
+    try:
+        # excpetion hit on this line if nothing in list_of_coords- i.e. no matches
+        match_array[list_of_coords[:,0],list_of_coords[:,1]] = 1
+        labelled = label(match_array)
+        objects = find_objects(labelled[0])
+        coords = [{'x':(slice_x.start, slice_x.stop),'y':(slice_y.start, slice_y.stop)} for (slice_y,slice_x) in objects]
+        final_positions = [(int(np.mean(coords[i]['y'])),int(np.mean(coords[i]['x']))) for i in range(len(coords))]
+        return final_positions
+    except IndexError:
+        print 'no matches found'
+        # this error occurs if no matches are found
+        return []
 
 
-def find_potential_match_regions(template, transformed_array, method='correlation', raw_tolerance=0.666):
-    """To prevent prohibitively slow calculation of normalisation coefficient at each point in image
-       find potential match points, and normalise these only these.
-       This function uses the definitions of the matching functions to calculate the expected match value
-       and finds positions in the transformed array matching these- normalisation will then eliminate false positives
+def find_potential_match_regions(template, transformed_array, method='correlation', number_normalisation_candidates=20, raw_tolerance=0.8):
+    """This function uses the definitions of the matching functions to calculate the expected match value
+       and finds positions in the transformed array matching these- normalisation will then eliminate false positives.
+       In order to support finding non-exact matches, we look for match regions. We take the center of each region found
+       as our potential match point. Then, a preliminary calculation aimed at finding out whether
+       the potential match is due to a bright region in the image, is performed. The number_normalisation_candidates best
+       candidates are selected on the basis of this calculation. These positions then undergo proper normalisation. To
+       prevent prohibitively slow calculation of the normalisation coefficient at each point in the image we find potential
+       match points, and normalise these only these.
+
+       Parameters:
+       number_normalisation_candidates- is the number of points which will be passed into the normalisation calculation.
+       IF YOU ARE UNABLE TO LOCATE EVERY MATCH IN AN IMAGE, INCREASE THIS NUMBER BEFORE YOU REDUCE RAW TOLERANCE
+       raw_tolerance- the proportion of the exact match value that we take as a potential match. For exact matching, this is
+       1, this is essentially a measure of how far from the template we allow our matches to be.
     """
     if method == 'correlation':
-        match_value  = np.sum(template**2) # this will be the value of the match in the
+        temp_norm = np.linalg.norm(template)**2
+        transformed_array_partial_normalisation = transformed_array/temp_norm
+        match_region_means = match_regions(transformed_array_partial_normalisation, raw_tolerance=raw_tolerance)
+        values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
     elif method == 'squared difference':
-        match_value = 0
+        match_region_means = match_regions(transformed_array, raw_tolerance=raw_tolerance)
+        values_at_possible_match_positions = [(region_mean,transformed_array_partial_normalisation[region_mean]) for region_mean in match_region_means]
     elif method == 'correlation coefficient':
-        temp_minus_mean = template - np.mean(template)
-        match_value = np.sum(temp_minus_mean**2)
+        temp_minus_mean = np.linalg.norm(template - np.mean(template))**2
+        transformed_array_partial_normalisation = transformed_array/temp_minus_mean
+        match_region_means = match_regions(transformed_array_partial_normalisation, raw_tolerance=raw_tolerance)
+        values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
     else:
         raise ValueError('Matching method not implemented')
-    condition = ((np.round(transformed_array, decimals=3)>=match_value*raw_tolerance) &
-                 (np.round(transformed_array, decimals=3)<=match_value*(1./raw_tolerance)))
-    return np.transpose(condition.nonzero())# trsnposition and omparison above take most time
+    sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
+    best_values = sorted_values[:number_normalisation_candidates]
+    result = [best_value[0] for best_value in best_values]
+    return result
 
 
-
+def match_regions(array, raw_tolerance=0.8):
+    condition = ((np.round(array, decimals=3)>=raw_tolerance) &
+                 (np.round(array, decimals=3)<=(1./raw_tolerance)))
+    result = np.transpose(condition.nonzero())# trsnposition and omparison above take most time
+    region_means = match_positions(array.shape, result)
+    return region_means
 
 # correlation coefficient matches at top left- perfect for tiling
 # correlation matches to bottom right- so requires transformation for tiling
-def get_tiles_at_potential_match_regions(image, template, transformed_array, method='correlation', raw_tolerance=0.001):
+def get_tiles_at_potential_match_regions(image, template, transformed_array, method='correlation', number_normalisation_candidates=20, raw_tolerance=0.9):
     if method not in ['correlation', 'correlation coefficient', 'squared difference']:
         raise ValueError('Matching method not implemented')
     h, w = template.shape
-    match_points = find_potential_match_regions(template, transformed_array, method=method, raw_tolerance=raw_tolerance)
-    match_points = [(match[0], match[1]) for match in match_points]
+    match_points = find_potential_match_regions(template, transformed_array, method=method, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance=raw_tolerance)
+    print match_points
     # create tile for each match point- use dict so we know which match point it applies to
     # match point here is position of top left pixel of tile
     image_tiles_dict = {match_points[i]:image[match_points[i][0]:match_points[i][0]+h,match_points[i][1]:match_points[i][1]+w] for i in range(len(match_points))}
