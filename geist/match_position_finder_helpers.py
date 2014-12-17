@@ -33,6 +33,25 @@ def best_point_in_region(transformed_array, objects):
     return best_coords
 
 
+def match_positions(shape, list_of_coords):
+    """ In cases where we have multiple matches, each highlighted by a region of coordinates,
+        we need to separate matches, and find mean of each to return as match position
+    """
+    match_array = np.zeros(shape)
+    try:
+        # excpetion hit on this line if nothing in list_of_coords- i.e. no matches
+        match_array[list_of_coords[:,0],list_of_coords[:,1]] = 1
+        labelled = label(match_array)
+        objects = find_objects(labelled[0])
+        coords = [{'x':(slice_x.start, slice_x.stop),'y':(slice_y.start, slice_y.stop)} for (slice_y,slice_x) in objects]
+        final_positions = [(int(np.mean(coords[i]['y'])),int(np.mean(coords[i]['x']))) for i in range(len(coords))]
+        return final_positions
+    except IndexError:
+        print 'no matches found'
+        # this error occurs if no matches are found
+        return []
+
+
 def find_potential_match_regions(template, transformed_array, method='correlation', number_normalisation_candidates=20, raw_tolerance=0.8):
     """This function uses the definitions of the matching functions to calculate the expected match value
        and finds positions in the transformed array matching these- normalisation will then eliminate false positives.
@@ -64,6 +83,8 @@ def find_potential_match_regions(template, transformed_array, method='correlatio
         values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
     else:
         raise ValueError('Matching method not implemented')
+    print len(values_at_possible_match_positions[0]), len(values_at_possible_match_positions[1]),len(values_at_possible_match_positions[1][0])
+    print values_at_possible_match_positions
     sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
     # if the number of values close enough to the match value is less than the specified number of normalisation candidates, take all the sorted values
     try:
@@ -78,8 +99,8 @@ def match_regions(array, raw_tolerance=0.8):
     condition = ((np.round(array, decimals=3)>=raw_tolerance) &
                  (np.round(array, decimals=3)<=(1./raw_tolerance)))
     result = np.transpose(condition.nonzero())# trsnposition and omparison above take most time
-    region_positions = match_region_positions(array.shape, result)
-    return best_point_in_region(array, region_positions)
+    region_positions = match_positions(array.shape, result)
+    return region_positions
 
 # correlation coefficient matches at top left- perfect for tiling
 # correlation matches to bottom right- so requires transformation for tiling
