@@ -85,14 +85,29 @@ def fuzzy_match(image, template, normed_tolerance=None, raw_tolerance=None, numb
        is a process which eliminates false positives, by taking into account some properties of the image tile and
        template which are not taken into account by the matching algorithms alone.
 
-       The tolerance values indicated below are from a short investigation, looking to minimise missing items we wish to match,
+       The tolerance values used as defaults below are from a short investigation, looking to minimise missing items we wish to match,
        as all as false positives which inevitably occur when performing fuzzy matching. To generate these values, we
        tested maching letters with different type of antialiasing on a number of backgrounds.
 
        HOW TO USE THIS FUNCTION:
-       Pass in your image and template, see if it matches with the default values.
-       If not, FIRST, reduce the normed tolerance- if the match on the image has a slightly different background to that
-       of the template,
+       - Pass in your image and template, see if it matches with the default values.
+       - If not, FIRST, reduce the normed tolerance- if the match on the image has a slightly different background to that
+       of the template, their norms will differ.
+       - If this does not match the template, increase number_normalisation_candidates. As depending on how non-exact the
+       match in the image is to the template, and how close to the expected match value other regions of the image, which
+       after normalisation may be discovered to not in fact be matches, the actual match may not be passed in for normalisation.
+       Increasing this number swiftly reduces the speed of the matching, but in some cases (see match_values_examples in the
+       template matching demo folder) it needs to be in the 1000's to match everything required.
+       - Finally, decrease the raw tolerance. This may increase the number of false positives passed in through to normalisation,
+       so without increasing the number of normalisation candidates, it may make no difference. Making the value too low will increase
+       the number of points considered for normalisation so that they form large regions, the center of these are taken as the actual
+       potenatial match point, so if the region is too large, the point, and hence the image tile, passed through to normalisation may
+       be far away from the best match point, and hence the match wont be found.
+       - Lowering both the normed tolerance and the raw tolerance, and increasing the number of normalisation candidates too far
+       can both impact the speed of matching and increase the number of false positives returned. Aim to have the tolerances as high
+       as possible for the particular template/image combination you are using, and the number of image tiles passed to the
+       normalisation step as low as possible. Values which work for text on various backgrounds are shown in the script in the
+       match_values_examples folder.
 
     """
     if method == 'correlation':

@@ -89,17 +89,17 @@ class FuzzyTemplateFinder(BaseFinder):
         They are thus more robust to slight variations in rendering,
 
     """
-    def __init__(self, template, normed_tolerance=None, raw_tolerance=None):
+    def __init__(self, template, normed_tolerance=None, number_normalisation_candidates=None, raw_tolerance=None):
         self.template = template
         self.normed_tolerance = normed_tolerance
         self.raw_tolerance = raw_tolerance
 
-    def find(self, in_location, normed_tolerance=None, raw_tolerance=None, method='correlation'):
+    def find(self, in_location, normed_tolerance=None, number_normalisation_candidates=None, raw_tolerance=None, method='correlation'):
         h, w = self.template.image.shape[:2]
         image = in_location.image
         gimage = grey_scale(image)
         gtemplate = grey_scale(self.template.image)
-        
+
         if normed_tolerance is None:
             normed_tolerance = self.normed_tolerance
         if raw_tolerance is None:

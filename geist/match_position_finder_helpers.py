@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.ndimage.measurements import label, find_objects
 
-def match_positions(shape, list_of_coords):
+def match_region_positions(shape, list_of_coords):
     """ In cases where we have multiple matches, each highlighted by a region of coordinates,
         we need to separate matches, and find mean of each to return as match position
     """
@@ -11,13 +11,26 @@ def match_positions(shape, list_of_coords):
         match_array[list_of_coords[:,0],list_of_coords[:,1]] = 1
         labelled = label(match_array)
         objects = find_objects(labelled[0])
-        coords = [{'x':(slice_x.start, slice_x.stop),'y':(slice_y.start, slice_y.stop)} for (slice_y,slice_x) in objects]
-        final_positions = [(int(np.mean(coords[i]['y'])),int(np.mean(coords[i]['x']))) for i in range(len(coords))]
-        return final_positions
+        return objects
     except IndexError:
         print 'no matches found'
         # this error occurs if no matches are found
         return []
+
+
+def best_point_in_region(transformed_array, objects):
+    """ Where regions are found as potential matches, take the point in the
+        region which is closest to one as the potential match position
+    """
+    best_coords = []
+    for coord in objects:
+        array_section = transformed_array[coord]
+        compared_to_one = np.abs(array_section - 1.0)
+        best_value_in_region = np.transpose(np.where(compared_to_one == np.min(compared_to_one)))[0]
+        # then offset by slice
+        best_value_in_region_in_image = (best_value_in_region[0] + coord[0].start, best_value_in_region[1] + coord[1].start)
+        best_coords.append(best_value_in_region_in_image)
+    return best_coords
 
 
 def find_potential_match_regions(template, transformed_array, method='correlation', number_normalisation_candidates=20, raw_tolerance=0.8):
@@ -52,7 +65,11 @@ def find_potential_match_regions(template, transformed_array, method='correlatio
     else:
         raise ValueError('Matching method not implemented')
     sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
-    best_values = sorted_values[:number_normalisation_candidates]
+    # if the number of values close enough to the match value is less than the specified number of normalisation candidates, take all the sorted values
+    try:
+        best_values = sorted_values[:number_normalisation_candidates]
+    except IndexError:
+        best_values = sorted_values
     result = [best_value[0] for best_value in best_values]
     return result
 
@@ -61,8 +78,8 @@ def match_regions(array, raw_tolerance=0.8):
     condition = ((np.round(array, decimals=3)>=raw_tolerance) &
                  (np.round(array, decimals=3)<=(1./raw_tolerance)))
     result = np.transpose(condition.nonzero())# trsnposition and omparison above take most time
-    region_means = match_positions(array.shape, result)
-    return region_means
+    region_positions = match_region_positions(array.shape, result)
+    return best_point_in_region(array, region_positions)
 
 # correlation coefficient matches at top left- perfect for tiling
 # correlation matches to bottom right- so requires transformation for tiling
