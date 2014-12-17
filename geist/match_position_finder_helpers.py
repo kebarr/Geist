@@ -83,9 +83,10 @@ def find_potential_match_regions(template, transformed_array, method='correlatio
         values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
     else:
         raise ValueError('Matching method not implemented')
-    print len(values_at_possible_match_positions[0]), len(values_at_possible_match_positions[1]),len(values_at_possible_match_positions[1][0])
-    print values_at_possible_match_positions
-    sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
+    try:
+        sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
+    except IndexError:
+        return []
     # if the number of values close enough to the match value is less than the specified number of normalisation candidates, take all the sorted values
     try:
         best_values = sorted_values[:number_normalisation_candidates]
@@ -109,7 +110,6 @@ def get_tiles_at_potential_match_regions(image, template, transformed_array, met
         raise ValueError('Matching method not implemented')
     h, w = template.shape
     match_points = find_potential_match_regions(template, transformed_array, method=method, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance=raw_tolerance)
-    print match_points
     # create tile for each match point- use dict so we know which match point it applies to
     # match point here is position of top left pixel of tile
     image_tiles_dict = {match_points[i]:image[match_points[i][0]:match_points[i][0]+h,match_points[i][1]:match_points[i][1]+w] for i in range(len(match_points))}
@@ -162,7 +162,6 @@ def calculate_squared_differences(image_tile_dict, transformed_array, template, 
     # for correlation, then need to transofrm back to get correct value for division
     h, w = template.shape
     image_matches_normalised = {match_points[i]:-2*transformed_array[match_points[i][0], match_points[i][1]] + image_norms_squared[match_points[i]] + template_norm_squared for i in range(len(match_points))}
-    #print image_matches_normalised
     cutoff = h*w*255**2*sq_diff_tolerance
     normalised_matches = {key:value for key, value in image_matches_normalised.items() if np.round(value, decimals=3) <= cutoff}
     return normalised_matches.keys()

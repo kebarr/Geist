@@ -29,42 +29,41 @@ plt.imshow(res_im)
 plt.show()
 
 
-res = fuzzy_match(im_gs, a2, normed_tolerance=0.725, number_normalisation_candidates=500, raw_tolerance=0.8)
+res = fuzzy_match(im_gs, a3, normed_tolerance=0.72, number_normalisation_candidates=500, raw_tolerance=0.88)
+res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
+plt.imshow(res_im)
+plt.show()
+
+# in this one, the difference between a3 and a4 is too great to match a3 based on a4, without false positives
+res = fuzzy_match(im_gs, a4, normed_tolerance=0.77, number_normalisation_candidates=5000, raw_tolerance=0.8)
 res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
 plt.imshow(res_im)
 plt.show()
 
 
-res = fuzzy_match(im_gs, a2, normed_tolerance=0.725, number_normalisation_candidates=500, raw_tolerance=0.8)
+########### EXAMPLE VALUES USING CORRELATION COEFFICIENT
+
+res = fuzzy_match(im_gs, a1, normed_tolerance=0.73, number_normalisation_candidates=100, raw_tolerance=0.75, method = 'correlation coefficient')
 res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
 plt.imshow(res_im)
 plt.show()
 
 
-def match_positions(shape, list_of_coords):
-    """ In cases where we have multiple matches, each highlighted by a region of coordinates,
-        we need to separate matches, and find mean of each to return as match position
-    """
-    match_array = np.zeros(shape)
-    try:
-        # excpetion hit on this line if nothing in list_of_coords- i.e. no matches
-        match_array[list_of_coords[:,0],list_of_coords[:,1]] = 1
-        labelled = label(match_array)
-        objects = find_objects(labelled[0])
-        #coords = [{'x':(slice_x.start, slice_x.stop),'y':(slice_y.start, slice_y.stop)} for (slice_y,slice_x) in objects]
-        #final_positions = [(int(np.mean(coords[i]['y'])),int(np.mean(coords[i]['x']))) for i in range(len(coords))]
-        return objects
-    except IndexError:
-        print 'no matches found'
-        # this error occurs if no matches are found
-        return []
+res = fuzzy_match(im_gs, a2, normed_tolerance=0.628, raw_tolerance=0.63, method = 'correlation coefficient')
+res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
+plt.imshow(res_im)
+plt.show()
 
 
-def match_regions(array, raw_tolerance=0.8):
-    condition = ((np.round(array, decimals=3)>=raw_tolerance) &
-                 (np.round(array, decimals=3)<=(1./raw_tolerance)))
-    result = np.transpose(condition.nonzero())# trsnposition and omparison above take most time
-    return match_positions(array.shape, result)
+res = fuzzy_match(im_gs, a3, normed_tolerance=0.6, raw_tolerance=0.7, method = 'correlation coefficient')
+res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
+plt.imshow(res_im)
+plt.show()
 
 
-pos = match_regions(divided)
+res = fuzzy_match(im_gs, a4, normed_tolerance=0.7, number_normalisation_candidates=500, raw_tolerance=0.65, method = 'correlation coefficient')
+res_im  = highlight_matched_region_normalised(im_gs, a1.shape, res)
+plt.imshow(res_im)
+plt.show()
+
+
