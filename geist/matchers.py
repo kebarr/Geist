@@ -60,7 +60,7 @@ def match_via_correlation_coefficient(image, template, number_normalisation_cand
 
 
 
-def fuzzy_match(image, template, normed_tolerance=None, raw_tolerance=None, number_normalisation_candidates=None, method='correlation'):
+def fuzzy_match(image, template, normed_tolerance=0.95, raw_tolerance=0.95, number_normalisation_candidates=20, method='correlation'):
     """Determines, using a number of methods, whether a match(es) is present and returns the positions of
        the bottom right corners of the matches.
        Fuzzy matches returns regions, so the center of each region is returned as the final match location
@@ -111,28 +111,10 @@ def fuzzy_match(image, template, normed_tolerance=None, raw_tolerance=None, numb
 
     """
     if method == 'correlation':
-        if not number_normalisation_candidates:
-            number_normalisation_candidates = 20
-        if not normed_tolerance:
-            normed_tolerance = 0.95
-        if not raw_tolerance:
-            raw_tolerance = 0.95
         results = np.array(match_via_correlation(image, template, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance=raw_tolerance, normed_tolerance=normed_tolerance))
     elif method == 'correlation coefficient':
-        if not number_normalisation_candidates:
-            number_normalisation_candidates = 20
-        if not normed_tolerance:
-            normed_tolerance = 0.95
-        if not raw_tolerance:
-            raw_tolerance = 0.95
         results = np.array(match_via_correlation_coefficient(image, template, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance=raw_tolerance, normed_tolerance=normed_tolerance))
     elif method == 'squared difference':
-        if not number_normalisation_candidates:
-            number_normalisation_candidates = 20
-        if not normed_tolerance:
-            normed_tolerance = 0.05
-        if not raw_tolerance:
-            raw_tolerance = 0.95
         results = np.array(match_via_squared_difference(image, template, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance= raw_tolerance, sq_diff_tolerance=normed_tolerance))
     h, w = image.shape
     th, tw = template.shape

@@ -12,7 +12,7 @@ setup(
     version=__version__,
     packages=['geist', 'geist.backends'],
     install_requires=[
-        'numpy>=1.9.0',
+        'numpy',
         'scipy',
         'ooxcb',
         'PyHamcrest',
