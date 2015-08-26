@@ -120,20 +120,18 @@ def get_tiles_at_potential_match_regions(image, template, transformed_array, met
 ###############################################
 
 # image tiles dict is of form match_point coord:tile at that point
-def normalise_correlation(image_tile_dict, transformed_array, template, normed_tolerance=1):
+def normalise_correlation(image_region_list, transformed_array, template, normed_tolerance=1):
     """Calculates the normalisation coefficients of potential match positions
        Then normalises the correlation at these positions, and returns them
        if they do indeed constitute a match
     """
     template_norm = np.linalg.norm(template)
-    image_norms = {(x,y):np.linalg.norm(image_tile_dict[(x,y)])*template_norm for (x,y) in image_tile_dict.keys()}
-    match_points = image_tile_dict.keys()
+    [image_region.calculate_norm(template_norm) for image_region in image_region_list]
+    #match_points = [image_region.region for image_region in image_region_list]
     # for correlation, then need to transofrm back to get correct value for division
     h, w = template.shape
-    #points_from_transformed_array = [(match[0] + h - 1, match[1] + w - 1) for match in match_points]
-    image_matches_normalised = {match_points[i]:transformed_array[match_points[i][0], match_points[i][1]]/image_norms[match_points[i]] for i in range(len(match_points))}
-    result = {key:value for key, value in image_matches_normalised.items() if np.round(value, decimals=3) >= normed_tolerance}
-    return result.keys()
+    image_matches_normalised = [(image.region, image.normalise_array(transformed_array)) for image in image_region_list]
+    return [point for (point, norm) in image_matches_normalised if np.round(norm, decimals=3) >= normed_tolerance]
 
 
 # image tiles dict is of form match_point coord:tile at that point
@@ -143,28 +141,20 @@ def normalise_correlation_coefficient(image_tile_dict, transformed_array, templa
     template_mean = np.mean(template)
     template_minus_mean = template - template_mean
     template_norm = np.linalg.norm(template_minus_mean)
-    image_norms = {(x,y):np.linalg.norm(image_tile_dict[(x,y)]- np.mean(image_tile_dict[(x,y)]))*template_norm for (x,y) in image_tile_dict.keys()}
-    match_points = image_tile_dict.keys()
-    # for correlation, then need to transofrm back to get correct value for division
-    h, w = template.shape
-    image_matches_normalised = {match_points[i]:transformed_array[match_points[i][0], match_points[i][1]]/image_norms[match_points[i]] for i in range(len(match_points))}
-    normalised_matches = {key:value for key, value in image_matches_normalised.items() if np.round(value, decimals=3) >= normed_tolerance}
-    return normalised_matches.keys()
+    [image_region.corr_coeff_norm(template_norm) for image_region in image_region_list]
+    image_matches_normalised = [(image.region, image.normalise_array(transformed_array)) for image in image_region_list]
+    return [point for (point, norm) in image_matches_normalised if np.round(norm, decimals=3) >= normed_tolerance]
 
 
 
-def calculate_squared_differences(image_tile_dict, transformed_array, template, sq_diff_tolerance=0.1):
+def calculate_squared_differences(image_region_list, transformed_array, template, sq_diff_tolerance=0.1):
     """As above, but for when the squared differences matching method is used
     """
     template_norm_squared = np.sum(template**2)
-    image_norms_squared = {(x,y):np.sum(image_tile_dict[(x,y)]**2) for (x,y) in image_tile_dict.keys()}
-    match_points = image_tile_dict.keys()
-    # for correlation, then need to transofrm back to get correct value for division
-    h, w = template.shape
-    image_matches_normalised = {match_points[i]:-2*transformed_array[match_points[i][0], match_points[i][1]] + image_norms_squared[match_points[i]] + template_norm_squared for i in range(len(match_points))}
+    [image_region.sum_squared() for image_region in image_region_list]
+    image_matches_normalised = [(image.region, image.normalise_array(transformed_array)) for image in image_region_list]
     cutoff = h*w*255**2*sq_diff_tolerance
-    normalised_matches = {key:value for key, value in image_matches_normalised.items() if np.round(value, decimals=3) <= cutoff}
-    return normalised_matches.keys()
+    return [point for (point, norm) in image_matches_normalised if np.round(norm, decimals=3) <= cutoff]
 
 
 

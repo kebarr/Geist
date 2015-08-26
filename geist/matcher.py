@@ -1,4 +1,5 @@
 from geist.match_position_finder_helpers import get_tiles_at_potential_match_regions, normalise_correlation, normalise_correlation_coefficient, find_potential_match_regions
+from scipy.ndimage.measurements import label, find_objects
 from scipy.signal import fftconvolve
 import numpy as np
 
@@ -22,9 +23,7 @@ class FuzzyMatcher(MatchBase):
         # fft based convolution enables fast matching of large images
         correlation = fftconvolve(self.image, self.template[::-1,::-1])
         # trim the returned image, fftconvolve returns an image of width: (Temp_w-1) + Im_w + (Temp_w -1), likewise height
-        correlation = correlation[self.th-1:self.h, self.tw-1:self.w]
-        # find images regions which are potentially matches
-        match_position_dict = self.get_tiles_at_potential_match_regions(correlation)
+        self.correlation = correlation[self.th-1:self.h, self.tw-1:self.w]
 
     def find_potential_match_regions(self, transformed_array, method='correlation'):
         """This function uses the definitions of the matching functions to calculate the expected match value
@@ -45,10 +44,8 @@ class FuzzyMatcher(MatchBase):
         if method == 'correlation':
             temp_norm = np.linalg.norm(self.template)**2
             transformed_array = transformed_array/temp_norm
-            values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
-         # 'squared difference':[(region_mean,transformed_array_partial_normalisation[region_mean]) for region_mean in match_region_means]
         elif method == 'correlation coefficient':
-            temp_minus_mean = np.linalg.norm(template - np.mean(template))**2
+            temp_minus_mean = np.linalg.norm(self.template - np.mean(self.template))**2
             transformed_array = transformed_array/temp_minus_mean
         match_region_means = self.match_regions(transformed_array)
         if method is not 'squared difference':
@@ -60,17 +57,35 @@ class FuzzyMatcher(MatchBase):
         else:
             return []
         # if the number of values close enough to the match value is less than the specified number of normalisation candidates, take all the sorted values
-        index = min(number_normalisation_candidates, len(sorted_values))
+        index = min(self.number_normalisation_candidates, len(sorted_values))
         best_values = sorted_values[:index]
         result = [best_value[0] for best_value in best_values]
         return result
 
+    def match_via_correlation(self):
+        # find images regions which are potentially matches
+        found_image_regions = self.get_tiles_at_potential_match_regions('correlation')
+        # bright spots in images can lead to false positivies- the normalisation carried out here eliminates those
+        return normalise_correlation(found_image_regions, self.correlation, self.template, normed_tolerance=self.normed_tolerance)
+
+    def match_via_squared_difference(self, sq_diff_tolerance=0.1):
+        found_image_regions = self.get_tiles_at_potential_match_regions('squared difference')
+        return calculate_squared_differences(found_image_regions, self.correlation, self.template, sq_diff_tolerance=sq_diff_tolerance)
+
+    def match_via_correlation_coefficient(self):
+        temp_mean = np.mean(self.template)
+        temp_minus_mean = self.template - temp_mean
+        convolution = fftconvolve(self.image, temp_minus_mean[::-1,::-1])
+        self.correlation = convolution[th-1:h, tw-1:w]
+        found_image_regions = self.get_tiles_at_potential_match_regions(method='correlation coefficient')
+        return normalise_correlation_coefficient(found_image_regions, convolution, template, normed_tolerance=normed_tolerance)
 
     def match_regions(self, array):
         condition = ((np.round(array, decimals=3)>=self.raw_tolerance) &
                  (np.round(array, decimals=3)<=(1./self.raw_tolerance)))
         result = np.transpose(condition.nonzero())# trsnposition and omparison above take most time
-        if result:
+        region_positions = None
+        if len(result) != 0:
             region_positions = self.match_positions(array.shape, result)
         return region_positions
 
@@ -83,36 +98,67 @@ class FuzzyMatcher(MatchBase):
         match_array[list_of_coords[:,0],list_of_coords[:,1]] = 1
         labelled = label(match_array)
         objects = find_objects(labelled[0])
-        coords = [MatchRegion(slice_x, slice_y) for (slice_y,slice_x) in objects]
-        final_positions = [coords[i].calculate_means() for i in range(len(coords))]
+        coords = [MatchRegion(slice_x, slice_y).y_x_means() for (slice_y,slice_x) in objects]
         return final_positions
 
     # correlation coefficient matches at top left- perfect for tiling
     # correlation matches to bottom right- so requires transformation for tiling
-    def get_tiles_at_potential_match_regions(self, method='correlation'9):
-        if method not in ['correlation', 'correlation coefficient', 'squared difference']:
-            raise ValueError('Matching method not implemented')
-        match_points = self.find_potential_match_regions(template, transformed_array, method=method)
+    def get_tiles_at_potential_match_regions(self, method):
+        match_points = self.find_potential_match_regions(self.correlation, method=method)
         # create tile for each match point- use dict so we know which match point it applies to
         # match point here is position of top left pixel of tile
-        image_tiles_dict = {match_points[i]:image[match_points[i][0]:match_points[i][0]+h,match_points[i][1]:match_points[i][1]+w] for i in range(len(match_points))}
-        return image_tiles_dict
+        image_regions = [MatchedImage(self.image, match_point) for match_point in match_points]
+        return image_regions
 
-                                
-# use geist location obect
+# helper methods to clarify above
+class MatchedImage(object):
+    def __init__(self, image, match_region):
+        self.image = image
+        self.region = match_region
+        self.h, self.w = image.shape
+        self.image_at_match_region()
+
+    def image_at_match_region(self):
+        self.image_match = self.image[self.region]
+
+    def calculate_norm(self, template_norm):
+        self.norm = np.linalg.norm(self.image_at_match_region)*template_norm
+
+    def normalise_array(self, np_array):
+        return np_array[self.region]/self.norm
+
+    def corr_coeff_norm(self, template_norm):
+        self.norm = np.linalg.norm(self.image_at_match_region- np.mean(self.image_at_match_region))*template_norm
+
+    def sq_diff_norm(self, np_array):
+        return -2*np_array[self.region] + self.sum_squared
+    
+    def sum_squared(self, np_array):
+        self.sum_squared = np.sum(self.image_at_match_region)**2
+
+                                 
+
+                                  
+           
 class MatchRegion(object):
     def __init__(self, slice_x, slice_y):
+        self.x = slice_x
+        self.y = slice_y
+        print(self.x, self.y)
         self.x_start = slice_x.start
         self.x_stop = slice_x.stop
         self.y_start = slice_y.start
         self.y_stop = slice_y.stop
-    
-    def calculate_means(self):
+        print(self.y_start, self.y_stop)
+
+
+    def y_x_means(self):
         y_mean = int(np.mean(self.y_start, self.y_stop))
-        x_mean = int((np.mean(self.x_start, self.x_stop)))
+        x_mean = int(np.mean(self.x_start, self.x_stop))
         return y_mean, x_mean
 
                                                 
+
 
 class MatchImageCreator(MatchBase):
     def highlight_matched_region_no_normalisation(self, method='correlation', raw_tolerance=0.666):

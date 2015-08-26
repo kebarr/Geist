@@ -51,8 +51,9 @@ def fuzzy_match(image, template, normed_tolerance=0.95, raw_tolerance=0.95, numb
 
     """
     matcher = FuzzyMatcher(image, template, number_normalisation_candidates=number_normalisation_candidates, raw_tolerance=raw_tolerance, normed_tolerance=normed_tolerance)
+    matcher.prepare_match()
     if method == 'correlation':
-        results = matcher.match_via_correlation())
+        results = matcher.match_via_correlation()
     elif method == 'correlation coefficient':
         results = matcher.match_via_correlation_coefficient()
     elif method == 'squared difference':
