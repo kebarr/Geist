@@ -1,3 +1,5 @@
+import numpy as np
+
 from .matcher import FuzzyMatcher
 
 def fuzzy_match(image, template, normed_tolerance=0.95, raw_tolerance=0.95, number_normalisation_candidates=20, method='correlation'):

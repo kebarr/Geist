@@ -68,13 +68,11 @@ def find_potential_match_regions(template, transformed_array, method='correlatio
        raw_tolerance- the proportion of the exact match value that we take as a potential match. For exact matching, this is
        1, this is essentially a measure of how far from the template we allow our matches to be.
     """
-    if method == 'correlation':
+    if method == 'correlation' or 'squared difference':
         temp_norm = np.linalg.norm(template)**2
         transformed_array_partial_normalisation = transformed_array/temp_norm
         match_region_means = match_regions(transformed_array_partial_normalisation, raw_tolerance=raw_tolerance)
         values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
-    elif method == 'squared difference':
-        match_region_means = match_regions(transformed_array, raw_tolerance=raw_tolerance)
         values_at_possible_match_positions = [(region_mean,transformed_array_partial_normalisation[region_mean]) for region_mean in match_region_means]
     elif method == 'correlation coefficient':
         temp_minus_mean = np.linalg.norm(template - np.mean(template))**2

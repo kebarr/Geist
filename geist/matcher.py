@@ -41,16 +41,16 @@ class FuzzyMatcher(MatchBase):
        raw_tolerance- the proportion of the exact match value that we take as a potential match. For exact matching, this is
        1, this is essentially a measure of how far from the template we allow our matches to be.
        """
-        if method == 'correlation':
-            temp_norm = np.linalg.norm(self.template)**2
-            transformed_array = transformed_array/temp_norm
+        if method == 'correlation' or method=='squared difference':
+            temp_array = np.linalg.norm(self.template)**2
         elif method == 'correlation coefficient':
-            temp_minus_mean = np.linalg.norm(self.template - np.mean(self.template))**2
-            transformed_array = transformed_array/temp_minus_mean
+            temp_array = np.linalg.norm(self.template - np.mean(self.template))**2
+        transformed_array = transformed_array/temp_array
         match_region_means = self.match_regions(transformed_array)
         if method is not 'squared difference':
-            values_at_possible_match_positions = [(region_mean,abs(1-transformed_array_partial_normalisation[region_mean])) for region_mean in match_region_means]
+            values_at_possible_match_positions = [(region_mean,abs(1-transformed_array[region_mean])) for region_mean in match_region_means]
         else:
+            # todo- squareed difference
             values_at_possible_match_positions = [(region_mean,transformed_array_partial_normalisation[region_mean]) for region_mean in match_region_means]
         if values_at_possible_match_positions:
             sorted_values = sorted(values_at_possible_match_positions, key=lambda x:x[1])
@@ -99,7 +99,7 @@ class FuzzyMatcher(MatchBase):
         labelled = label(match_array)
         objects = find_objects(labelled[0])
         coords = [MatchRegion(slice_x, slice_y).y_x_means() for (slice_y,slice_x) in objects]
-        return final_positions
+        return coords
 
     # correlation coefficient matches at top left- perfect for tiling
     # correlation matches to bottom right- so requires transformation for tiling
@@ -122,13 +122,14 @@ class MatchedImage(object):
         self.image_match = self.image[self.region]
 
     def calculate_norm(self, template_norm):
-        self.norm = np.linalg.norm(self.image_at_match_region)*template_norm
+        self.norm = np.linalg.norm(self.image_match)
+        self.norm *= template_norm
 
     def normalise_array(self, np_array):
         return np_array[self.region]/self.norm
 
     def corr_coeff_norm(self, template_norm):
-        self.norm = np.linalg.norm(self.image_at_match_region- np.mean(self.image_at_match_region))*template_norm
+        self.norm = np.linalg.norm(self.image_match- np.mean(self.image_match))*template_norm
 
     def sq_diff_norm(self, np_array):
         return -2*np_array[self.region] + self.sum_squared
@@ -153,28 +154,15 @@ class MatchRegion(object):
 
 
     def y_x_means(self):
-        y_mean = int(np.mean(self.y_start, self.y_stop))
-        x_mean = int(np.mean(self.x_start, self.x_stop))
+        y_mean = int(np.mean([self.y_start, self.y_stop]))
+        x_mean = int(np.mean([self.x_start, self.x_stop]))
         return y_mean, x_mean
 
                                                 
 
 
 class MatchImageCreator(MatchBase):
-    def highlight_matched_region_no_normalisation(self, method='correlation', raw_tolerance=0.666):
-        conv = fftconvolve(self.image, self.template[::-1,::-1])
-        r = find_potential_match_regions(template, conv, method=method, raw_tolerance=raw_tolerance)
-        r_in_image = [(r_x, r_y) for (r_x, r_y) in r if (r_x < image.shape[0] and r_y < image.shape[1])]
-        im_rgb = to_rgb(image)
-        for (x,y) in r_in_image:
-            try:
-                im_rgb[x-self.th:x,y-self.tw:y] = 0, 100, 100
-            except IndexError:
-                im_rgb[x,y] = 0, 100, 100
-        return im_rgb
-
-
-    def highlight_matched_region_normalised(self, list_of_coords):
+    def highlight_matched_region(self, list_of_coords):
         im_rgb = to_rgb(self.image)
         for (y,x) in list_of_coords:
             try:
