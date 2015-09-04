@@ -20,8 +20,7 @@ def normalise_correlation_coefficient(image_region_list, transformed_array, temp
     template_mean = np.mean(template)
     template_minus_mean = template - template_mean
     template_norm = np.linalg.norm(template_minus_mean)
-    [image_region.corr_coeff_norm(transformed_array, template_norm) for image_region in image_region_list]
-    image_matches_normalised = [(image.region, image.normalise_array(transformed_array, template_norm)) for image in image_region_list]
+    image_matches_normalised = [(image_region.region, image_region.corr_coeff_norm(transformed_array, template_norm)) for image_region in image_region_list]
     return [point for (point, norm) in image_matches_normalised if np.round(norm, decimals=3) >= normed_tolerance]
 
 
