@@ -4,7 +4,7 @@ from .finders import Location
 from .vision import best_convolution, grey_scale, find_edges
 from .colour import rgb_to_hsv
 from .ocr import Classifier
-from .matchers import fuzzy_match
+from .fuzzy_match import fuzzy_match
 import numpy
 from scipy.ndimage.measurements import (
     label,

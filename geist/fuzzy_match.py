@@ -61,5 +61,5 @@ def fuzzy_match(image, template, normed_tolerance=0.95, raw_tolerance=0.95, numb
     elif method == 'squared difference':
         results = matcher.match_via_squared_difference()
     # to maintain consistency with previous geist matching, move match position to bottom right
-    results = np.array([(result[1] + matcher.tw, result[0] + matcher.th) for result in results])
+    results = np.array([(result.x_start + matcher.tw, result.y_start + matcher.th) for result in results])
     return results
